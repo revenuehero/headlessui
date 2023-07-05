@@ -1,44 +1,59 @@
 import React, {
+  ContextType,
+  // Types
+  ElementType,
   Fragment,
+  MutableRefObject,
+  ReactNode,
+  Ref,
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
-
-  // Types
-  ElementType,
-  MutableRefObject,
-  Ref,
-  useMemo,
-  ContextType,
 } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Props } from '../../types'
-import { forwardRefWithAs, RefProp, HasDisplayName, render } from '../../utils/render'
+import { useEvent } from '../../hooks/use-event'
 import { useIsoMorphicEffect } from '../../hooks/use-iso-morphic-effect'
-import { usePortalRoot } from '../../internal/portal-force-root'
-import { useServerHandoffComplete } from '../../hooks/use-server-handoff-complete'
-import { optionalRef, useSyncRefs } from '../../hooks/use-sync-refs'
 import { useOnUnmount } from '../../hooks/use-on-unmount'
 import { useOwnerDocument } from '../../hooks/use-owner'
+import { useServerHandoffComplete } from '../../hooks/use-server-handoff-complete'
+import { optionalRef, useSyncRefs } from '../../hooks/use-sync-refs'
+import { usePortalRoot } from '../../internal/portal-force-root'
+import { Props } from '../../types'
 import { env } from '../../utils/env'
-import { useEvent } from '../../hooks/use-event'
-import { isInShadowDom, getShadowRoot } from '../../utils/shadow-dom'
+import { HasDisplayName, RefProp, forwardRefWithAs, render } from '../../utils/render'
 
-export function useShadowRoot(...args: Parameters<typeof getShadowRoot>) {
-  return useMemo(() => getShadowRoot(...args), [...args])
+// enable a custom portal root
+let RHPortalRootContext = createContext<HTMLElement | ShadowRoot | null>(null)
+
+interface RHPortalRootProps {
+  children: ReactNode
+  root: HTMLElement | ShadowRoot | null
+}
+
+export function RHPortalRoot(props: RHPortalRootProps) {
+  return (
+    <RHPortalRootContext.Provider value={props.root}>{props.children}</RHPortalRootContext.Provider>
+  )
+}
+
+function useRHPortalRootContext() {
+  try {
+    return useContext(RHPortalRootContext)
+  } catch (error) {
+    return null
+  }
 }
 
 function usePortalTarget(ref: MutableRefObject<HTMLElement | null>): HTMLElement | null {
   let forceInRoot = usePortalRoot()
+  let rhPortalRoot = useRHPortalRootContext()
   let groupTarget = useContext(PortalGroupContext)
 
   let ownerDocument = useOwnerDocument(ref)
-
-  const hasShadowRoot = isInShadowDom(ref.current)
-  const shadowRoot = useShadowRoot(ref)
 
   let [target, setTarget] = useState(() => {
     // Group context is used, but still null
@@ -46,33 +61,29 @@ function usePortalTarget(ref: MutableRefObject<HTMLElement | null>): HTMLElement
 
     // No group context is used, let's create a default portal root
     if (env.isServer) return null
-    let existingRoot = hasShadowRoot
-      ? shadowRoot?.getElementById('headlessui-portal-root')
-      : ownerDocument?.getElementById('headlessui-portal-root')
+
+    const portalInjectTarget = rhPortalRoot || ownerDocument?.body || null
+
+    let existingRoot = portalInjectTarget?.querySelector<HTMLElement>('#headlessui-portal-root')
 
     if (existingRoot) return existingRoot
 
-    if (ownerDocument === null || (hasShadowRoot && shadowRoot === null)) return null
+    if (ownerDocument === null || portalInjectTarget === null) return null
 
     let root = ownerDocument.createElement('div')
     root.setAttribute('id', 'headlessui-portal-root')
-    return hasShadowRoot
-      ? shadowRoot?.appendChild(root) ?? null
-      : ownerDocument.body.appendChild(root)
+
+    return portalInjectTarget.appendChild(root)
   })
 
   // Ensure the portal root is always in the DOM
   useEffect(() => {
-    console.log('target', hasShadowRoot, target)
-
     if (target === null) return
 
-    if (!ownerDocument?.body.contains(target)) {
-      ownerDocument?.body.appendChild(target)
-    }
+    const portalInjectTarget = rhPortalRoot || ownerDocument?.body
 
-    if (hasShadowRoot && !shadowRoot?.contains(target)) {
-      shadowRoot?.appendChild(target)
+    if (!portalInjectTarget?.contains(target)) {
+      portalInjectTarget?.appendChild(target)
     }
   }, [target, ownerDocument])
 
@@ -106,10 +117,8 @@ function PortalFn<TTag extends ElementType = typeof DEFAULT_PORTAL_TAG>(
   )
   let ownerDocument = useOwnerDocument(internalPortalRootRef)
 
-  console.log('internalPortalRootRef', internalPortalRootRef)
-  console.log('props', props)
-
   let target = usePortalTarget(internalPortalRootRef)
+
   let [element] = useState<HTMLDivElement | null>(() =>
     env.isServer ? null : ownerDocument?.createElement('div') ?? null
   )
