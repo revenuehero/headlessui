@@ -6,7 +6,6 @@ interface RHPortalRootProps {
     root: HTMLElement | ShadowRoot | null;
 }
 export declare function RHPortalRoot(props: RHPortalRootProps): JSX.Element;
-export declare function useRHPortalRootContext(): HTMLElement | ShadowRoot | null;
 declare let DEFAULT_PORTAL_TAG: React.ExoticComponent<{
     children?: React.ReactNode;
 }>;

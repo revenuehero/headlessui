@@ -47,8 +47,7 @@ __export(src_exports, {
   RadioGroup: () => RadioGroup,
   Switch: () => Switch,
   Tab: () => Tab,
-  Transition: () => Transition,
-  useRHPortalRootContext: () => useRHPortalRootContext
+  Transition: () => Transition
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -2517,7 +2516,6 @@ function PortalFn(props, ref) {
   );
   let ownerDocument = useOwnerDocument(internalPortalRootRef);
   let target = usePortalTarget(internalPortalRootRef);
-  console.log("B", target);
   let [element] = (0, import_react27.useState)(
     () => {
       var _a3;
