@@ -105,7 +105,7 @@ export function render<TFeature extends Features, TTag extends ElementType, TSlo
 }
 
 function _render<TTag extends ElementType, TSlot>(
-  props: Props<TTag, TSlot> & { ref?: unknown },
+  props: Props<TTag, TSlot> & { ref?: unknown; className?: string },
   slot: TSlot = {} as TSlot,
   tag: ElementType,
   name: string
@@ -178,7 +178,8 @@ function _render<TTag extends ElementType, TSlot>(
 
       let newClassName =
         typeof childProps?.className === 'function'
-          ? (...args: any[]) => classNames(childProps?.className(...args), rest.className)
+          ? // @ts-expect-error
+            (...args: any[]) => classNames(childProps?.className(...args), rest.className)
           : classNames(childProps?.className, rest.className)
 
       let classNameProps = newClassName ? { className: newClassName } : {}
