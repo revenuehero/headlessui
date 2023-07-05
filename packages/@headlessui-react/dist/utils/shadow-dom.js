@@ -1,0 +1,1 @@
+const u=o=>(console.log("shadow Element",o),o===null?!1:o.matches(":host *"));function l(o){if(o===null)return null;let n=o instanceof Node?o:o==null?void 0:o.current;for(;n!=null&&n.parentNode;)n=n==null?void 0:n.parentNode;return n}export{l as getShadowRoot,u as isInShadowDom};
