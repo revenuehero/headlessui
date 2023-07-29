@@ -20,7 +20,8 @@
     "build": "npm-run-all -p 'react build' 'vue build'",
     "test": "./scripts/test.sh",
     "lint": "./scripts/lint.sh",
-    "lint-check": "CI=true ./scripts/lint.sh"
+    "lint-check": "CI=true ./scripts/lint.sh",
+    "postinstall": "yarn react build"
   },
   "husky": {
     "hooks": {

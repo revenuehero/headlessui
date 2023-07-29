@@ -1002,17 +1002,20 @@ function append(entries, key, value) {
     objectToFormEntries(value, key, entries);
   }
 }
-function attemptSubmit(element) {
-  var _a3;
-  let form = (_a3 = element == null ? void 0 : element.form) != null ? _a3 : element.closest("form");
+function attemptSubmit(elementInForm) {
+  var _a3, _b;
+  let form = (_a3 = elementInForm == null ? void 0 : elementInForm.form) != null ? _a3 : elementInForm.closest("form");
   if (!form)
     return;
-  for (let element2 of form.elements) {
-    if (element2.tagName === "INPUT" && element2.type === "submit" || element2.tagName === "BUTTON" && element2.type === "submit" || element2.nodeName === "INPUT" && element2.type === "image") {
-      element2.click();
+  for (let element of form.elements) {
+    if (element === elementInForm)
+      continue;
+    if (element.tagName === "INPUT" && element.type === "submit" || element.tagName === "BUTTON" && element.type === "submit" || element.nodeName === "INPUT" && element.type === "image") {
+      element.click();
       return;
     }
   }
+  (_b = form.requestSubmit) == null ? void 0 : _b.call(form);
 }
 
 // src/internal/hidden.tsx
@@ -1473,11 +1476,11 @@ function ComboboxFn(props, ref) {
     if (defaultValue === void 0)
       return;
     d.addEventListener(form.current, "reset", () => {
-      onChange(defaultValue);
+      theirOnChange == null ? void 0 : theirOnChange(defaultValue);
     });
   }, [
     form,
-    onChange
+    theirOnChange
     /* Explicitly ignoring `defaultValue` */
   ]);
   return /* @__PURE__ */ import_react19.default.createElement(ComboboxActionsContext.Provider, { value: actions }, /* @__PURE__ */ import_react19.default.createElement(ComboboxDataContext.Provider, { value: data }, /* @__PURE__ */ import_react19.default.createElement(
@@ -1574,6 +1577,8 @@ function InputFn(props, ref) {
   useWatch(
     ([newState], [oldState]) => {
       if (newState === 0 /* Open */ && oldState === 1 /* Closed */) {
+        if (isTyping.current)
+          return;
         let input = data.inputRef.current;
         if (!input)
           return;
@@ -1591,18 +1596,12 @@ function InputFn(props, ref) {
     [data.comboboxState]
   );
   let isComposing = (0, import_react19.useRef)(false);
-  let composedChangeEvent = (0, import_react19.useRef)(null);
   let handleCompositionStart = useEvent(() => {
     isComposing.current = true;
   });
   let handleCompositionEnd = useEvent(() => {
     d.nextFrame(() => {
       isComposing.current = false;
-      if (composedChangeEvent.current) {
-        actions.openCombobox();
-        onChange == null ? void 0 : onChange(composedChangeEvent.current);
-        composedChangeEvent.current = null;
-      }
     });
   });
   let handleKeyDown = useEvent((event) => {
@@ -1717,12 +1716,8 @@ function InputFn(props, ref) {
     }
   });
   let handleChange = useEvent((event) => {
-    if (isComposing.current) {
-      composedChangeEvent.current = event;
-      return;
-    }
-    actions.openCombobox();
     onChange == null ? void 0 : onChange(event);
+    actions.openCombobox();
   });
   let handleBlur = useEvent(() => {
     isTyping.current = false;
@@ -1742,7 +1737,7 @@ function InputFn(props, ref) {
     role: "combobox",
     type,
     "aria-controls": (_a3 = data.optionsRef.current) == null ? void 0 : _a3.id,
-    "aria-expanded": data.disabled ? void 0 : data.comboboxState === 0 /* Open */,
+    "aria-expanded": data.comboboxState === 0 /* Open */,
     "aria-activedescendant": data.activeOptionIndex === null ? void 0 : (_b = data.options[data.activeOptionIndex]) == null ? void 0 : _b.id,
     "aria-labelledby": labelledby,
     "aria-autocomplete": "list",
@@ -1848,7 +1843,7 @@ function ButtonFn(props, ref) {
     tabIndex: -1,
     "aria-haspopup": "listbox",
     "aria-controls": (_a3 = data.optionsRef.current) == null ? void 0 : _a3.id,
-    "aria-expanded": data.disabled ? void 0 : data.comboboxState === 0 /* Open */,
+    "aria-expanded": data.comboboxState === 0 /* Open */,
     "aria-labelledby": labelledby,
     disabled: data.disabled,
     onClick: handleClick,
@@ -3663,7 +3658,7 @@ function ButtonFn2(props, ref) {
     ref: buttonRef,
     id,
     type,
-    "aria-expanded": props.disabled ? void 0 : state.disclosureState === 0 /* Open */,
+    "aria-expanded": state.disclosureState === 0 /* Open */,
     "aria-controls": state.linkedPanel ? state.panelId : void 0,
     onKeyDown: handleKeyDown,
     onKeyUp: handleKeyUp,
@@ -4093,11 +4088,11 @@ function ListboxFn(props, ref) {
     if (defaultValue === void 0)
       return;
     d.addEventListener(form.current, "reset", () => {
-      onChange(defaultValue);
+      theirOnChange == null ? void 0 : theirOnChange(defaultValue);
     });
   }, [
     form,
-    onChange
+    theirOnChange
     /* Explicitly ignoring `defaultValue` */
   ]);
   return /* @__PURE__ */ import_react35.default.createElement(ListboxActionsContext.Provider, { value: actions }, /* @__PURE__ */ import_react35.default.createElement(ListboxDataContext.Provider, { value: data }, /* @__PURE__ */ import_react35.default.createElement(
@@ -4202,7 +4197,7 @@ function ButtonFn3(props, ref) {
     type: useResolveButtonType(props, data.buttonRef),
     "aria-haspopup": "listbox",
     "aria-controls": (_a3 = data.optionsRef.current) == null ? void 0 : _a3.id,
-    "aria-expanded": data.disabled ? void 0 : data.listboxState === 0 /* Open */,
+    "aria-expanded": data.listboxState === 0 /* Open */,
     "aria-labelledby": labelledby,
     disabled: data.disabled,
     onKeyDown: handleKeyDown,
@@ -4711,7 +4706,7 @@ function ButtonFn4(props, ref) {
     type: useResolveButtonType(props, state.buttonRef),
     "aria-haspopup": "menu",
     "aria-controls": (_a3 = state.itemsRef.current) == null ? void 0 : _a3.id,
-    "aria-expanded": props.disabled ? void 0 : state.menuState === 0 /* Open */,
+    "aria-expanded": state.menuState === 0 /* Open */,
     onKeyDown: handleKeyDown,
     onKeyUp: handleKeyUp,
     onClick: handleClick
@@ -5334,7 +5329,7 @@ function ButtonFn5(props, ref) {
     ref: buttonRef,
     id: state.buttonId,
     type,
-    "aria-expanded": props.disabled ? void 0 : state.popoverState === 0 /* Open */,
+    "aria-expanded": state.popoverState === 0 /* Open */,
     "aria-controls": state.panel ? state.panelId : void 0,
     onKeyDown: handleKeyDown,
     onKeyUp: handleKeyUp,
@@ -6239,6 +6234,7 @@ var import_react43 = __toESM(require("react"), 1);
 var import_react42 = __toESM(require("react"), 1);
 function FocusSentinel({ onFocus }) {
   let [enabled, setEnabled] = (0, import_react42.useState)(true);
+  let mounted = useIsMounted();
   if (!enabled)
     return null;
   return /* @__PURE__ */ import_react42.default.createElement(
@@ -6258,8 +6254,10 @@ function FocusSentinel({ onFocus }) {
             return;
           }
           if (onFocus()) {
-            setEnabled(false);
             cancelAnimationFrame(frame);
+            if (!mounted.current)
+              return;
+            setEnabled(false);
             return;
           }
           frame = requestAnimationFrame(forwardFocus);
