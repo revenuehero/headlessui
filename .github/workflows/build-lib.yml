@@ -1,0 +1,60 @@
+name: Build and push react library
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Begin CI...
+        uses: actions/checkout@v2
+      - name: Use Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache@v2
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/yarn.lock') }}
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        env:
+          CI: true
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [install]
+
+    steps:
+      - name: Begin CI...
+        uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-${{ env.NODE_VERSION }}-modules-${{ hashFiles('**/yarn.lock') }}
+      - name: Build react library
+        run: yarn react build
+        env:
+          CI: true
+
+  push:
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Begin CI...
+        uses: actions/checkout@v2
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: jartek
+          committer_name: jartek
+          author_email: 2030949+jartek@users.noreply.github.com
+          committer_email: 2030949+jartek@users.noreply.github.com
+          message: 'chore: build library'
+          add: 'packages/@headlessui-react/dist'
+          ref: 'main'
+          github_token: ${{ secrets.PAT }}
