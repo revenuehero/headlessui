@@ -189,18 +189,23 @@ export let Combobox = defineComponent({
 
     let mode = computed(() => (props.multiple ? ValueMode.Multi : ValueMode.Single))
     let nullable = computed(() => props.nullable)
-    let [value, theirOnChange] = useControllable(
-      computed(() =>
-        props.modelValue === undefined
-          ? match(mode.value, {
-              [ValueMode.Multi]: [],
-              [ValueMode.Single]: undefined,
-            })
-          : props.modelValue
-      ),
+    let [directValue, theirOnChange] = useControllable(
+      computed(() => props.modelValue),
       (value: unknown) => emit('update:modelValue', value),
       computed(() => props.defaultValue)
     )
+
+    let value = computed(() =>
+      directValue.value === undefined
+        ? match(mode.value, {
+            [ValueMode.Multi]: [],
+            [ValueMode.Single]: undefined,
+          })
+        : directValue.value
+    )
+
+    let goToOptionRaf: ReturnType<typeof requestAnimationFrame> | null = null
+    let orderOptionsRaf: ReturnType<typeof requestAnimationFrame> | null = null
 
     let api = {
       comboboxState,
@@ -275,47 +280,53 @@ export let Combobox = defineComponent({
         comboboxState.value = ComboboxStates.Open
       },
       goToOption(focus: Focus, id?: string, trigger?: ActivationTrigger) {
-        defaultToFirstOption.value = false
-
-        if (props.disabled) return
-        if (
-          optionsRef.value &&
-          !optionsPropsRef.value.static &&
-          comboboxState.value === ComboboxStates.Closed
-        ) {
-          return
+        if (goToOptionRaf !== null) {
+          cancelAnimationFrame(goToOptionRaf)
         }
 
-        let adjustedState = adjustOrderedState()
+        goToOptionRaf = requestAnimationFrame(() => {
+          defaultToFirstOption.value = false
 
-        // It's possible that the activeOptionIndex is set to `null` internally, but
-        // this means that we will fallback to the first non-disabled option by default.
-        // We have to take this into account.
-        if (adjustedState.activeOptionIndex === null) {
-          let localActiveOptionIndex = adjustedState.options.findIndex(
-            (option) => !option.dataRef.disabled
+          if (props.disabled) return
+          if (
+            optionsRef.value &&
+            !optionsPropsRef.value.static &&
+            comboboxState.value === ComboboxStates.Closed
+          ) {
+            return
+          }
+
+          let adjustedState = adjustOrderedState()
+
+          // It's possible that the activeOptionIndex is set to `null` internally, but
+          // this means that we will fallback to the first non-disabled option by default.
+          // We have to take this into account.
+          if (adjustedState.activeOptionIndex === null) {
+            let localActiveOptionIndex = adjustedState.options.findIndex(
+              (option) => !option.dataRef.disabled
+            )
+
+            if (localActiveOptionIndex !== -1) {
+              adjustedState.activeOptionIndex = localActiveOptionIndex
+            }
+          }
+
+          let nextActiveOptionIndex = calculateActiveIndex(
+            focus === Focus.Specific
+              ? { focus: Focus.Specific, id: id! }
+              : { focus: focus as Exclude<Focus, Focus.Specific> },
+            {
+              resolveItems: () => adjustedState.options,
+              resolveActiveIndex: () => adjustedState.activeOptionIndex,
+              resolveId: (option) => option.id,
+              resolveDisabled: (option) => option.dataRef.disabled,
+            }
           )
 
-          if (localActiveOptionIndex !== -1) {
-            adjustedState.activeOptionIndex = localActiveOptionIndex
-          }
-        }
-
-        let nextActiveOptionIndex = calculateActiveIndex(
-          focus === Focus.Specific
-            ? { focus: Focus.Specific, id: id! }
-            : { focus: focus as Exclude<Focus, Focus.Specific> },
-          {
-            resolveItems: () => adjustedState.options,
-            resolveActiveIndex: () => adjustedState.activeOptionIndex,
-            resolveId: (option) => option.id,
-            resolveDisabled: (option) => option.dataRef.disabled,
-          }
-        )
-
-        activeOptionIndex.value = nextActiveOptionIndex
-        activationTrigger.value = trigger ?? ActivationTrigger.Other
-        options.value = adjustedState.options
+          activeOptionIndex.value = nextActiveOptionIndex
+          activationTrigger.value = trigger ?? ActivationTrigger.Other
+          options.value = adjustedState.options
+        })
       },
       selectOption(id: string) {
         let option = options.value.find((item) => item.id === id)
@@ -369,8 +380,14 @@ export let Combobox = defineComponent({
         api.goToOption(Focus.Specific, id)
       },
       registerOption(id: string, dataRef: ComboboxOptionData) {
+        if (orderOptionsRaf) cancelAnimationFrame(orderOptionsRaf)
+
         let option = { id, dataRef }
-        let adjustedState = adjustOrderedState((options) => [...options, option])
+
+        let adjustedState = adjustOrderedState((options) => {
+          options.push(option)
+          return options
+        })
 
         // Check if we have a selected value that we can make active.
         if (activeOptionIndex.value === null) {
@@ -394,7 +411,7 @@ export let Combobox = defineComponent({
 
         // If some of the DOM elements aren't ready yet, then we can retry in the next tick.
         if (adjustedState.options.some((option) => !dom(option.dataRef.domRef))) {
-          requestAnimationFrame(() => {
+          orderOptionsRaf = requestAnimationFrame(() => {
             let adjustedState = adjustOrderedState()
             options.value = adjustedState.options
             activeOptionIndex.value = adjustedState.activeOptionIndex
@@ -647,9 +664,7 @@ export let ComboboxButton = defineComponent({
         tabindex: '-1',
         'aria-haspopup': 'listbox',
         'aria-controls': dom(api.optionsRef)?.id,
-        'aria-expanded': api.disabled.value
-          ? undefined
-          : api.comboboxState.value === ComboboxStates.Open,
+        'aria-expanded': api.comboboxState.value === ComboboxStates.Open,
         'aria-labelledby': api.labelRef.value ? [dom(api.labelRef)?.id, id].join(' ') : undefined,
         disabled: api.disabled.value === true ? true : undefined,
         onKeydown: handleKeydown,
@@ -730,9 +745,11 @@ export let ComboboxInput = defineComponent({
       watch(
         [currentDisplayValue, api.comboboxState],
         ([currentDisplayValue, state], [oldCurrentDisplayValue, oldState]) => {
+          // When the user is typing, we want to not touch the `input` at all. Especially when they
+          // are using an IME, we don't want to mess with the input at all.
           if (isTyping.value) return
-          let input = dom(api.inputRef)
 
+          let input = dom(api.inputRef)
           if (!input) return
 
           if (oldState === ComboboxStates.Open && state === ComboboxStates.Closed) {
@@ -773,6 +790,10 @@ export let ComboboxInput = defineComponent({
       // already in an open state.
       watch([api.comboboxState], ([newState], [oldState]) => {
         if (newState === ComboboxStates.Open && oldState === ComboboxStates.Closed) {
+          // When the user is typing, we want to not touch the `input` at all. Especially when they
+          // are using an IME, we don't want to mess with the input at all.
+          if (isTyping.value) return
+
           let input = dom(api.inputRef)
           if (!input) return
 
@@ -795,19 +816,12 @@ export let ComboboxInput = defineComponent({
     })
 
     let isComposing = ref(false)
-    let composedChangeEvent = ref<(Event & { target: HTMLInputElement }) | null>(null)
     function handleCompositionstart() {
       isComposing.value = true
     }
     function handleCompositionend() {
       disposables().nextFrame(() => {
         isComposing.value = false
-
-        if (composedChangeEvent.value) {
-          api.openCombobox()
-          emit('change', composedChangeEvent.value)
-          composedChangeEvent.value = null
-        }
       })
     }
 
@@ -837,6 +851,10 @@ export let ComboboxInput = defineComponent({
         case Keys.Enter:
           isTyping.value = false
           if (api.comboboxState.value !== ComboboxStates.Open) return
+
+          // When the user is still in the middle of composing by using an IME, then we don't want
+          // to submit this value and close the Combobox yet. Instead, we will fallback to the
+          // default behaviour which is to "end" the composition.
           if (isComposing.value) return
 
           event.preventDefault()
@@ -930,12 +948,16 @@ export let ComboboxInput = defineComponent({
     }
 
     function handleInput(event: Event & { target: HTMLInputElement }) {
-      if (isComposing.value) {
-        composedChangeEvent.value = event
-        return
-      }
-      api.openCombobox()
+      // Always call the onChange listener even if the user is still typing using an IME (Input Method
+      // Editor).
+      //
+      // The main issue is Android, where typing always uses the IME APIs. Just waiting until the
+      // compositionend event is fired to trigger an onChange is not enough, because then filtering
+      // options while typing won't work at all because we are still in "composing" mode.
       emit('change', event)
+
+      // Open the combobox to show the results based on what the user has typed
+      api.openCombobox()
     }
 
     function handleBlur() {
@@ -958,9 +980,7 @@ export let ComboboxInput = defineComponent({
       let { id, displayValue, onChange: _onChange, ...theirProps } = props
       let ourProps = {
         'aria-controls': api.optionsRef.value?.id,
-        'aria-expanded': api.disabled.value
-          ? undefined
-          : api.comboboxState.value === ComboboxStates.Open,
+        'aria-expanded': api.comboboxState.value === ComboboxStates.Open,
         'aria-activedescendant':
           api.activeOptionIndex.value === null
             ? undefined

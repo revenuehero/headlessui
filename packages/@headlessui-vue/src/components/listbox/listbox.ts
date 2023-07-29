@@ -181,17 +181,20 @@ export let Listbox = defineComponent({
     }
 
     let mode = computed(() => (props.multiple ? ValueMode.Multi : ValueMode.Single))
-    let [value, theirOnChange] = useControllable(
-      computed(() =>
-        props.modelValue === undefined
-          ? match(mode.value, {
-              [ValueMode.Multi]: [],
-              [ValueMode.Single]: undefined,
-            })
-          : props.modelValue
-      ),
+
+    let [directValue, theirOnChange] = useControllable(
+      computed(() => props.modelValue),
       (value: unknown) => emit('update:modelValue', value),
       computed(() => props.defaultValue)
+    )
+
+    let value = computed(() =>
+      directValue.value === undefined
+        ? match(mode.value, {
+            [ValueMode.Multi]: [],
+            [ValueMode.Single]: undefined,
+          })
+        : directValue.value
     )
 
     let api = {
@@ -300,6 +303,10 @@ export let Listbox = defineComponent({
         activeOptionIndex.value = adjustedState.activeOptionIndex
         activationTrigger.value = ActivationTrigger.Other
       },
+      theirOnChange(value: unknown) {
+        if (props.disabled) return
+        theirOnChange(value)
+      },
       select(value: unknown) {
         if (props.disabled) return
         theirOnChange(
@@ -357,7 +364,7 @@ export let Listbox = defineComponent({
           if (props.defaultValue === undefined) return
 
           function handle() {
-            api.select(props.defaultValue)
+            api.theirOnChange(props.defaultValue)
           }
 
           form.value.addEventListener('reset', handle)
@@ -532,9 +539,7 @@ export let ListboxButton = defineComponent({
         type: type.value,
         'aria-haspopup': 'listbox',
         'aria-controls': dom(api.optionsRef)?.id,
-        'aria-expanded': api.disabled.value
-          ? undefined
-          : api.listboxState.value === ListboxStates.Open,
+        'aria-expanded': api.listboxState.value === ListboxStates.Open,
         'aria-labelledby': api.labelRef.value ? [dom(api.labelRef)?.id, id].join(' ') : undefined,
         disabled: api.disabled.value === true ? true : undefined,
         onKeydown: handleKeyDown,

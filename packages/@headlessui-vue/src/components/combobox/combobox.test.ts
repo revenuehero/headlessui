@@ -1553,6 +1553,52 @@ describe('Rendering', () => {
       })
     )
 
+    it('should be possible to reset to the default value in multiple mode', async () => {
+      let data = ['alice', 'bob', 'charlie']
+      let handleSubmission = jest.fn()
+
+      renderTemplate({
+        template: html`
+          <form @submit="handleSubmit">
+            <Combobox name="assignee" :defaultValue="['bob']" multiple>
+              <ComboboxButton v-slot="{ value }"
+                >{{ value.join(', ') || 'Trigger' }}</ComboboxButton
+              >
+              <ComboboxOptions>
+                <ComboboxOption v-for="person in data" :key="person" :value="person">
+                  {{ person }}
+                </ComboboxOption>
+              </ComboboxOptions>
+            </Combobox>
+            <button id="submit">submit</button>
+            <button type="reset" id="reset">reset</button>
+          </form>
+        `,
+        setup: () => ({
+          data,
+          handleSubmit(e: SubmitEvent) {
+            e.preventDefault()
+            handleSubmission(Object.fromEntries(new FormData(e.target as HTMLFormElement)))
+          },
+        }),
+      })
+
+      await click(document.getElementById('submit'))
+
+      // Bob is the defaultValue
+      expect(handleSubmission).toHaveBeenLastCalledWith({
+        'assignee[0]': 'bob',
+      })
+
+      await click(document.getElementById('reset'))
+      await click(document.getElementById('submit'))
+
+      // Bob is still the defaultValue
+      expect(handleSubmission).toHaveBeenLastCalledWith({
+        'assignee[0]': 'bob',
+      })
+    })
+
     it('should still call the onChange listeners when choosing new values', async () => {
       let handleChange = jest.fn()
 
@@ -2910,6 +2956,55 @@ describe('Keyboard interactions', () => {
                 </Combobox>
 
                 <button>Submit</button>
+              </form>
+            `,
+            setup() {
+              let value = ref('b')
+              return {
+                value,
+                handleKeyUp(event: KeyboardEvent) {
+                  // JSDom doesn't automatically submit the form but if we can
+                  // catch an `Enter` event, we can assume it was a submit.
+                  if (event.key === 'Enter') (event.currentTarget as HTMLFormElement).submit()
+                },
+                handleSubmit(event: SubmitEvent) {
+                  event.preventDefault()
+                  submits([...new FormData(event.currentTarget as HTMLFormElement).entries()])
+                },
+              }
+            },
+          })
+
+          // Focus the input field
+          getComboboxInput()?.focus()
+          assertActiveElement(getComboboxInput())
+
+          // Press enter (which should submit the form)
+          await press(Keys.Enter)
+
+          // Verify the form was submitted
+          expect(submits).toHaveBeenCalledTimes(1)
+          expect(submits).toHaveBeenCalledWith([['option', 'b']])
+        })
+      )
+
+      it(
+        'should submit the form on `Enter` (when no submit button was found)',
+        suppressConsoleLogs(async () => {
+          let submits = jest.fn()
+
+          renderTemplate({
+            template: html`
+              <form @submit="handleSubmit" @keyup="handleKeyUp">
+                <Combobox v-model="value" name="option">
+                  <ComboboxInput />
+                  <ComboboxButton>Trigger</ComboboxButton>
+                  <ComboboxOptions>
+                    <ComboboxOption value="a">Option A</ComboboxOption>
+                    <ComboboxOption value="b">Option B</ComboboxOption>
+                    <ComboboxOption value="c">Option C</ComboboxOption>
+                  </ComboboxOptions>
+                </Combobox>
               </form>
             `,
             setup() {
